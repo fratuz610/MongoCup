@@ -12,14 +12,46 @@
       $this->db = $this->conn->selectDB(end($connectionURLList));
     }
     
-    public function put($obj) {
-      $this->_getCollection($obj)->save($obj);
+    public function put($obj, $classNameOrObj = null) {
+      
+      if(is_null($classNameOrObj))
+        $this->_persist($this->_getCollection($obj), $obj);
+      else
+        $this->_persist($this->_getCollection($classNameOrObj), $obj);
     }
     
-    public function putAll($listOfObj) {
-      $this->_getCollection($listOfObj[0])->batchInsert($listOfObj);
+    public function putAll($listOfObj, $classNameOrObj = null) {
+      
+      if(!is_array($listOfObj))
+        throw new MongoCupException("putAll: an array is required!");
+      
+      if(is_null($classNameOrObj))
+        $collection = $this->_getCollection($listOfObj[0]);
+      else
+        $collection = $this->_getCollection($classNameOrObj);
+      
+      foreach($listOfObj as $singleObj) {
+        $this->_persist($collection, $singleObj);
+      }
     }
         
+    private function _persist($collection, $obj) {
+      
+      if(is_object($obj)) {
+        $reflClass = null;
+        try {
+           $reflClass = new ReflectionClass($obj);
+        } catch (ReflectionException $ex) {
+          throw new MongoCupException("Unable to find class with name '$obj'");
+        }
+        
+        $map = get_object_vars($obj);
+        $map['__cn__'] = $reflClass->getName();
+        $collection->save($map);
+      }
+      
+    }
+    
     public function get() {
       if(func_num_args() == 3)
         return $this->_getSimpleFilter (func_get_arg (0), func_get_arg (1), func_get_arg (2));
@@ -33,21 +65,22 @@
     
     private function _getSimpleFilter($fieldName, $fieldValue, $classNameOrObj) {
       // like getList but limit to 1
-      return $this->getList($fieldName, $fieldValue, $classNameOrObj)->limit(1);
+      return $this->getList($fieldName, $fieldValue, $classNameOrObj)->limit(1)->getNext();
     }
     
     private function _getFromQuery($query, $classNameOrObj) {
       // like getList but limit to 1
-      return $this->getList($query, $classNameOrObj)->limit(1);
+      return $this->getList($query, $classNameOrObj)->limit(1)->getNext();
     }
     
     private function _getFromClass($classNameOrObj) {
       
       // like getList but limit to 1
-      return $this->getList($classNameOrObj)->limit(1);
+      return $this->getList($classNameOrObj)->limit(1)->getNext();
     }
     
     public function getList() {
+      
       if(func_num_args() == 3)
         return $this->_getListSimpleFilter (func_get_arg (0), func_get_arg (1), func_get_arg (2));
       else if(func_num_args() == 2)
@@ -72,8 +105,8 @@
     }
     
     private function _getListFromQuery($mongoQuery, $classNameOrObj) {
-      if(get_class($mongoQuery) != "MongoLiteQuery")
-        throw new MongoCupException("The query parameter should be an instance of MongoLiteQuery");
+      if(get_class($mongoQuery) != "MongoCupQuery")
+        throw new MongoCupException("The query parameter should be an instance of MongoCupQuery");
       
       if(!is_string($classNameOrObj) && !is_object($classNameOrObj))
         throw new MongoCupException("The className parameter should be a string or an object instance");
@@ -88,8 +121,11 @@
       return $this->getList($mongoQuery, $classNameOrObj);
     }
     
-    public function delete($obj) {
-      return $this->_getCollection($obj)->delete($obj);
+    public function delete($obj, $classNameOrObj) {
+      if(is_null($classNameOrObj))
+        return $this->_getCollection($obj)->remove($obj);
+      else
+        return $this->_getCollection($classNameOrObj)->remove($obj);
     }
     
     public function deleteAll() {
@@ -112,8 +148,8 @@
     
     private function _deleteAllFromQuery($query, $classNameOrObj) {
       
-      if(get_class($query) != "MongoLiteQuery")
-        throw new MongoCupException("The query parameter should be an instance of MongoLiteQuery");
+      if(get_class($query) != "MongoCupQuery")
+        throw new MongoCupException("The query parameter should be an instance of MongoCupQuery");
       
       if(!is_string($classNameOrObj) && !is_object($classNameOrObj))
         throw new MongoCupException("The className parameter should be a string or an object instance");
@@ -156,8 +192,8 @@
     
     private function _getResultSetSizeFromQuery($query, $classNameOrObj) {
       
-      if(get_class($query) != "MongoLiteQuery")
-        throw new MongoCupException("The query parameter should be an instance of MongoLiteQuery");
+      if(get_class($query) != "MongoCupQuery")
+        throw new MongoCupException("The query parameter should be an instance of MongoCupQuery");
       
       if(!is_string($classNameOrObj) && !is_object($classNameOrObj))
         throw new MongoCupException("The className parameter should be a string or an object instance");
@@ -187,15 +223,26 @@
     
     private function _getCollection($objOrClassName) {
       
+      $collectionName = $this->_getCollectionName($objOrClassName);
+      
+      return $this->db->selectCollection($collectionName);
+    }
+    
+    private function _getCollectionName($objOrClassName) {
+      
+      if(is_string($objOrClassName))
+        return $objOrClassName;
+      
+      if(is_array($objOrClassName) && isset($objOrClassName['__cn__']))
+        return $objOrClassName['__cn__'];
+      
       $reflClass = null;
       try {
          $reflClass = new ReflectionClass($objOrClassName);
       } catch (ReflectionException $ex) {
-         throw new MongoCupException("Unable to find class with name '".$objOrClassName."'");
+        throw new MongoCupException("Unable to find class with name '".$objOrClassName."'");
       }
-      $className = $reflClass->getName();
-      
-      return $this->db->selectCollection($className);
+      return $reflClass->getName();
     }
     
     private function _toMongoCursor($cursorOrCollection, $mongoQuery) {
