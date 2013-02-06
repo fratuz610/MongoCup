@@ -48,7 +48,10 @@
         $map = get_object_vars($obj);
         $map['__cn__'] = $reflClass->getName();
         $collection->save($map);
-      }
+      } else {
+		$collection->save($obj);
+		
+	  }
       
     }
     
