@@ -13,11 +13,10 @@
     }
     
     public function put($obj, $classNameOrObj = null) {
-      
       if(is_null($classNameOrObj))
-        $this->_persist($this->_getCollection($obj), $obj);
+        $this->_getCollection($obj)->save($obj);
       else
-        $this->_persist($this->_getCollection($classNameOrObj), $obj);
+        $this->_getCollection($classNameOrObj)->save($obj);
     }
     
     public function putAll($listOfObj, $classNameOrObj = null) {
@@ -25,36 +24,14 @@
       if(!is_array($listOfObj))
         throw new MongoCupException("putAll: an array is required!");
       
-      if(is_null($classNameOrObj))
-        $collection = $this->_getCollection($listOfObj[0]);
-      else
-        $collection = $this->_getCollection($classNameOrObj);
-      
       foreach($listOfObj as $singleObj) {
-        $this->_persist($collection, $singleObj);
+        if(is_null($classNameOrObj))
+          $this->_getCollection($listOfObj[0])->save($singleObj);
+        else
+          $this->_getCollection($classNameOrObj)->save($singleObj);
       }
     }
         
-    private function _persist($collection, $obj) {
-      
-      if(is_object($obj)) {
-        $reflClass = null;
-        try {
-           $reflClass = new ReflectionClass($obj);
-        } catch (ReflectionException $ex) {
-          throw new MongoCupException("Unable to find class with name '$obj'");
-        }
-        
-        $map = get_object_vars($obj);
-        $map['__cn__'] = $reflClass->getName();
-        $collection->save($map);
-      } else {
-		$collection->save($obj);
-		
-	  }
-      
-    }
-    
     public function get() {
       if(func_num_args() == 3)
         return $this->_getSimpleFilter (func_get_arg (0), func_get_arg (1), func_get_arg (2));
@@ -225,27 +202,19 @@
     }
     
     private function _getCollection($objOrClassName) {
-      
-      $collectionName = $this->_getCollectionName($objOrClassName);
-      
-      return $this->db->selectCollection($collectionName);
-    }
-    
-    private function _getCollectionName($objOrClassName) {
-      
       if(is_string($objOrClassName))
-        return $objOrClassName;
-      
-      if(is_array($objOrClassName) && isset($objOrClassName['__cn__']))
-        return $objOrClassName['__cn__'];
-      
+        return $this->db->selectCollection($objOrClassName);
+            
       $reflClass = null;
       try {
          $reflClass = new ReflectionClass($objOrClassName);
       } catch (ReflectionException $ex) {
-        throw new MongoCupException("Unable to find class with name '".$objOrClassName."'");
+         throw new MongoCupException("Unable to find class with name '".$objOrClassName."'");
       }
-      return $reflClass->getName();
+      
+      $className = $reflClass->getName();
+      
+      return $this->db->selectCollection($className);
     }
     
     private function _toMongoCursor($cursorOrCollection, $mongoQuery) {
@@ -277,6 +246,7 @@
       
       // we apply the field filters
       $cursorOrCollection = $cursorOrCollection->find($fieldFilterList);
+         
       
       $orderFilterList = array();
       
