@@ -4,6 +4,7 @@ MongoCup
 A simple tiny OO php wrapper for MongoDB
 
 How to use it
+--------------
 
     // We create a connection to the database
     $mongoCup = new MongoCup("mongodb://localhost:27017/myDbName");
